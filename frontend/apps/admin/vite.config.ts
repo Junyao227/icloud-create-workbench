@@ -10,6 +10,7 @@ export default defineConfig({
       devtools: false,
       inspect: false,
       projectInfo: false,
+      router: { autoCodeSplitting: false },
       removeConsole: false
     }
   }

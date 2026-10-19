@@ -1,3 +1,4 @@
+import { createMessageSearch } from "./services/message-search.mjs";
 import { loadConfig } from "./config.mjs";
 import { createDatabase } from "./db.mjs";
 import { createRepositories } from "./repositories.mjs";
@@ -23,7 +24,7 @@ function main() {
   const inboxSyncWorker = createInboxSyncWorker({ config, repositories, inboxService });
   campaignService.start();
   inboxSyncWorker.start();
-  const app = createApp({ config, repositories, icloudService, inboxService, campaignService, publicMailService });
+  const app = createApp({ config, repositories, icloudService, inboxService, campaignService, publicMailService, messageSearch: createMessageSearch(db) });
   const server = app.listen(config.port, config.host, error => {
     if (error) {
       console.error(`HTTP 监听失败：${error.message}`);

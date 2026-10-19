@@ -66,6 +66,97 @@ body {
   line-height: 1.6;
 }
 
+.public-console {
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at top left, rgb(214 240 255 / 58%), transparent 32rem),
+    linear-gradient(180deg, #eef5f8 0%, #f8fafc 100%);
+}
+
+.public-console-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 72px;
+  padding: 1rem 1.5rem;
+  color: #fff;
+  background: #0d1b24;
+  border-bottom: 1px solid rgb(255 255 255 / 12%);
+}
+
+.public-console-header :is(h1, h2, h3, p, span) {
+  color: inherit;
+}
+
+.public-console-grid,
+.public-api-grid,
+.public-open-grid {
+  display: grid;
+  gap: 1.25rem;
+  width: 100%;
+  max-width: 1240px;
+  margin-inline: auto;
+  padding: 1.25rem;
+}
+
+.public-console-grid {
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+}
+
+.public-api-grid,
+.public-open-grid {
+  grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.35fr);
+}
+
+.public-console-sidebar,
+.public-console-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.public-mailbox-list {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.public-mailbox-card,
+.public-message-card {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.public-mailbox-card {
+  display: grid;
+  grid-template-columns: 3rem 1fr;
+  gap: 0.2rem 0.5rem;
+}
+
+.public-mailbox-card > small {
+  grid-column: 2;
+  color: var(--color-text-secondary);
+}
+
+.public-mailbox-card.active,
+.public-message-card.active {
+  background: #ecfbf7;
+  border-color: #0f8b7a;
+  box-shadow: 0 0 0 1px #0f8b7a inset;
+}
+
+.public-message-card:hover,
+.public-mailbox-card:hover {
+  border-color: #83c5be;
+}
+
 @media (max-width: 640px) {
   .workbench-page {
     min-width: 0;
@@ -73,5 +164,16 @@ body {
 
   .workbench-mail-frame {
     height: min(420px, 52vh);
+  }
+
+  .public-console-grid,
+  .public-api-grid,
+  .public-open-grid {
+    grid-template-columns: 1fr;
+    padding: 0.75rem;
+  }
+
+  .public-console-header {
+    padding-inline: 1rem;
   }
 }

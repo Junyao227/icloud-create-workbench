@@ -56,6 +56,7 @@
     "dayjs": "catalog:utils",
     "i18next": "catalog:i18n",
     "jotai": "catalog:core",
+    "json5": "^2.2.3",
     "lucide-react": "catalog:ui-shared",
     "motion": "catalog:ui-shared",
     "nprogress": "catalog:ui-shared",

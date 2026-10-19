@@ -14,7 +14,7 @@ import { Text } from '@astryxdesign/core/Text';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { useToast } from '@astryxdesign/core/Toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 
 import PageHeader from '@/components/PageHeader';
@@ -46,6 +46,7 @@ const EMPTY_FORM: InboxFormValues = { email: '', host: '', mailbox: 'INBOX', pas
 
 /** 渲染每条 CK 独立的 IMAP 配置、同步状态和邮件列表。 */
 const InboxPage = () => {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const toast = useToast();
   const [accountId, setAccountId] = useState('');
@@ -150,7 +151,12 @@ const InboxPage = () => {
     <Section className="workbench-page" padding={6}>
       <VStack gap={6}>
         <PageHeader
-          actions={<Button isDisabled={!accountId} label="立即同步" variant="primary" onClick={sync} />}
+          actions={
+            <HStack gap={2}>
+              <Button label="邮件搜索" onClick={() => navigate({ to: '/messages' })} />
+              <Button isDisabled={!accountId} label="立即同步" variant="primary" onClick={sync} />
+            </HStack>
+          }
           description="为每条 CK 独立配置 IMAP，并自动提取邮件验证码。"
           title="收件与验证码"
         />
@@ -247,7 +253,10 @@ const InboxPage = () => {
         </Grid>
         <Divider />
         <VStack gap={4}>
-          <Heading level={3}>最近邮件</Heading>
+          <HStack hAlign="between" vAlign="center" wrap="wrap">
+            <Heading level={3}>最近邮件</Heading>
+            <Button label="搜索全部邮件" onClick={() => navigate({ to: '/messages' })} />
+          </HStack>
           {renderMessages()}
         </VStack>
       </VStack>

@@ -9,8 +9,11 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './../../pages/__root'
+import { Route as PickupRouteImport } from './../../pages/pickup'
+import { Route as ApiLinksRouteImport } from './../../pages/api-links'
 import { Route as adminLayoutRouteImport } from './../../pages/(admin)/layout'
 import { Route as IndexRouteImport } from './../../pages/index'
+import { Route as ConsoleOpenPhpRouteImport } from './../../pages/console/open-php'
 import { Route as errors500RouteImport } from './../../pages/(errors)/500'
 import { Route as errors404RouteImport } from './../../pages/(errors)/404'
 import { Route as errors403RouteImport } from './../../pages/(errors)/403'
@@ -18,6 +21,7 @@ import { Route as authLoginOutRouteImport } from './../../pages/(auth)/login-out
 import { Route as authLoginLayoutRouteImport } from './../../pages/(auth)/login/layout'
 import { Route as authLoginIndexRouteImport } from './../../pages/(auth)/login/index'
 import { Route as adminTasksIndexRouteImport } from './../../pages/(admin)/tasks/index'
+import { Route as adminMessagesIndexRouteImport } from './../../pages/(admin)/messages/index'
 import { Route as adminInboxIndexRouteImport } from './../../pages/(admin)/inbox/index'
 import { Route as adminHomeIndexRouteImport } from './../../pages/(admin)/home/index'
 import { Route as adminGuideIndexRouteImport } from './../../pages/(admin)/guide/index'
@@ -25,6 +29,16 @@ import { Route as adminAddressesIndexRouteImport } from './../../pages/(admin)/a
 import { Route as adminAccountsIndexRouteImport } from './../../pages/(admin)/accounts/index'
 import { Route as MailEmailTokenRouteImport } from './../../pages/mail/$email/$token'
 
+const PickupRoute = PickupRouteImport.update({
+  id: '/pickup',
+  path: '/pickup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiLinksRoute = ApiLinksRouteImport.update({
+  id: '/api-links',
+  path: '/api-links',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const adminLayoutRoute = adminLayoutRouteImport.update({
   id: '/(admin)',
   getParentRoute: () => rootRouteImport,
@@ -32,6 +46,11 @@ const adminLayoutRoute = adminLayoutRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConsoleOpenPhpRoute = ConsoleOpenPhpRouteImport.update({
+  id: '/console/open-php',
+  path: '/console/open-php',
   getParentRoute: () => rootRouteImport,
 } as any)
 const errors500Route = errors500RouteImport.update({
@@ -69,6 +88,11 @@ const adminTasksIndexRoute = adminTasksIndexRouteImport.update({
   path: '/tasks/',
   getParentRoute: () => adminLayoutRoute,
 } as any)
+const adminMessagesIndexRoute = adminMessagesIndexRouteImport.update({
+  id: '/messages/',
+  path: '/messages/',
+  getParentRoute: () => adminLayoutRoute,
+} as any)
 const adminInboxIndexRoute = adminInboxIndexRouteImport.update({
   id: '/inbox/',
   path: '/inbox/',
@@ -102,32 +126,40 @@ const MailEmailTokenRoute = MailEmailTokenRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api-links': typeof ApiLinksRoute
+  '/pickup': typeof PickupRoute
   '/login': typeof authLoginLayoutRouteWithChildren
   '/login-out': typeof authLoginOutRoute
   '/403': typeof errors403Route
   '/404': typeof errors404Route
   '/500': typeof errors500Route
+  '/console/open-php': typeof ConsoleOpenPhpRoute
   '/mail/$email/$token': typeof MailEmailTokenRoute
   '/accounts/': typeof adminAccountsIndexRoute
   '/addresses/': typeof adminAddressesIndexRoute
   '/guide/': typeof adminGuideIndexRoute
   '/home/': typeof adminHomeIndexRoute
   '/inbox/': typeof adminInboxIndexRoute
+  '/messages/': typeof adminMessagesIndexRoute
   '/tasks/': typeof adminTasksIndexRoute
   '/login/': typeof authLoginIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api-links': typeof ApiLinksRoute
+  '/pickup': typeof PickupRoute
   '/login-out': typeof authLoginOutRoute
   '/403': typeof errors403Route
   '/404': typeof errors404Route
   '/500': typeof errors500Route
+  '/console/open-php': typeof ConsoleOpenPhpRoute
   '/mail/$email/$token': typeof MailEmailTokenRoute
   '/accounts': typeof adminAccountsIndexRoute
   '/addresses': typeof adminAddressesIndexRoute
   '/guide': typeof adminGuideIndexRoute
   '/home': typeof adminHomeIndexRoute
   '/inbox': typeof adminInboxIndexRoute
+  '/messages': typeof adminMessagesIndexRoute
   '/tasks': typeof adminTasksIndexRoute
   '/login': typeof authLoginIndexRoute
 }
@@ -135,17 +167,21 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/(admin)': typeof adminLayoutRouteWithChildren
+  '/api-links': typeof ApiLinksRoute
+  '/pickup': typeof PickupRoute
   '/(auth)/login': typeof authLoginLayoutRouteWithChildren
   '/(auth)/login-out': typeof authLoginOutRoute
   '/(errors)/403': typeof errors403Route
   '/(errors)/404': typeof errors404Route
   '/(errors)/500': typeof errors500Route
+  '/console/open-php': typeof ConsoleOpenPhpRoute
   '/mail/$email/$token': typeof MailEmailTokenRoute
   '/(admin)/accounts/': typeof adminAccountsIndexRoute
   '/(admin)/addresses/': typeof adminAddressesIndexRoute
   '/(admin)/guide/': typeof adminGuideIndexRoute
   '/(admin)/home/': typeof adminHomeIndexRoute
   '/(admin)/inbox/': typeof adminInboxIndexRoute
+  '/(admin)/messages/': typeof adminMessagesIndexRoute
   '/(admin)/tasks/': typeof adminTasksIndexRoute
   '/(auth)/login/': typeof authLoginIndexRoute
 }
@@ -153,49 +189,61 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/api-links'
+    | '/pickup'
     | '/login'
     | '/login-out'
     | '/403'
     | '/404'
     | '/500'
+    | '/console/open-php'
     | '/mail/$email/$token'
     | '/accounts/'
     | '/addresses/'
     | '/guide/'
     | '/home/'
     | '/inbox/'
+    | '/messages/'
     | '/tasks/'
     | '/login/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/api-links'
+    | '/pickup'
     | '/login-out'
     | '/403'
     | '/404'
     | '/500'
+    | '/console/open-php'
     | '/mail/$email/$token'
     | '/accounts'
     | '/addresses'
     | '/guide'
     | '/home'
     | '/inbox'
+    | '/messages'
     | '/tasks'
     | '/login'
   id:
     | '__root__'
     | '/'
     | '/(admin)'
+    | '/api-links'
+    | '/pickup'
     | '/(auth)/login'
     | '/(auth)/login-out'
     | '/(errors)/403'
     | '/(errors)/404'
     | '/(errors)/500'
+    | '/console/open-php'
     | '/mail/$email/$token'
     | '/(admin)/accounts/'
     | '/(admin)/addresses/'
     | '/(admin)/guide/'
     | '/(admin)/home/'
     | '/(admin)/inbox/'
+    | '/(admin)/messages/'
     | '/(admin)/tasks/'
     | '/(auth)/login/'
   fileRoutesById: FileRoutesById
@@ -203,16 +251,33 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   adminLayoutRoute: typeof adminLayoutRouteWithChildren
+  ApiLinksRoute: typeof ApiLinksRoute
+  PickupRoute: typeof PickupRoute
   authLoginLayoutRoute: typeof authLoginLayoutRouteWithChildren
   authLoginOutRoute: typeof authLoginOutRoute
   errors403Route: typeof errors403Route
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
+  ConsoleOpenPhpRoute: typeof ConsoleOpenPhpRoute
   MailEmailTokenRoute: typeof MailEmailTokenRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/pickup': {
+      id: '/pickup'
+      path: '/pickup'
+      fullPath: '/pickup'
+      preLoaderRoute: typeof PickupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api-links': {
+      id: '/api-links'
+      path: '/api-links'
+      fullPath: '/api-links'
+      preLoaderRoute: typeof ApiLinksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/(admin)': {
       id: '/(admin)'
       path: ''
@@ -225,6 +290,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/console/open-php': {
+      id: '/console/open-php'
+      path: '/console/open-php'
+      fullPath: '/console/open-php'
+      preLoaderRoute: typeof ConsoleOpenPhpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/(errors)/500': {
@@ -274,6 +346,13 @@ declare module '@tanstack/react-router' {
       path: '/tasks'
       fullPath: '/tasks/'
       preLoaderRoute: typeof adminTasksIndexRouteImport
+      parentRoute: typeof adminLayoutRoute
+    }
+    '/(admin)/messages/': {
+      id: '/(admin)/messages/'
+      path: '/messages'
+      fullPath: '/messages/'
+      preLoaderRoute: typeof adminMessagesIndexRouteImport
       parentRoute: typeof adminLayoutRoute
     }
     '/(admin)/inbox/': {
@@ -327,6 +406,7 @@ interface adminLayoutRouteChildren {
   adminGuideIndexRoute: typeof adminGuideIndexRoute
   adminHomeIndexRoute: typeof adminHomeIndexRoute
   adminInboxIndexRoute: typeof adminInboxIndexRoute
+  adminMessagesIndexRoute: typeof adminMessagesIndexRoute
   adminTasksIndexRoute: typeof adminTasksIndexRoute
 }
 
@@ -336,6 +416,7 @@ const adminLayoutRouteChildren: adminLayoutRouteChildren = {
   adminGuideIndexRoute: adminGuideIndexRoute,
   adminHomeIndexRoute: adminHomeIndexRoute,
   adminInboxIndexRoute: adminInboxIndexRoute,
+  adminMessagesIndexRoute: adminMessagesIndexRoute,
   adminTasksIndexRoute: adminTasksIndexRoute,
 }
 
@@ -358,11 +439,14 @@ const authLoginLayoutRouteWithChildren = authLoginLayoutRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   adminLayoutRoute: adminLayoutRouteWithChildren,
+  ApiLinksRoute: ApiLinksRoute,
+  PickupRoute: PickupRoute,
   authLoginLayoutRoute: authLoginLayoutRouteWithChildren,
   authLoginOutRoute: authLoginOutRoute,
   errors403Route: errors403Route,
   errors404Route: errors404Route,
   errors500Route: errors500Route,
+  ConsoleOpenPhpRoute: ConsoleOpenPhpRoute,
   MailEmailTokenRoute: MailEmailTokenRoute,
 }
 export const routeTree = rootRouteImport

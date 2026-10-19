@@ -59,5 +59,5 @@ const GuidePage = () => {
 
 export const Route = createFileRoute('/(admin)/guide/')({
   component: GuidePage,
-  staticData: { title: 'CK 获取指南', menu: { icon: 'mdi:book-open-page-variant', order: 6 } }
+  staticData: { title: 'CK 获取指南', menu: { icon: 'mdi:book-open-page-variant', order: 7 } }
 });

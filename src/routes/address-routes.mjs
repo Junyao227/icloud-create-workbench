@@ -6,6 +6,24 @@ function csvCell(value) {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
+/** 将邮箱和公开链接拼接成买家可直接使用的文本行。 */
+function publicLinkLine(email, access, kind) {
+  if (kind === "api") return `${email}----${access.apiUrl}`;
+  if (kind === "both") return `${email}----${access.viewerUrl}----${access.apiUrl}`;
+  return `${email}----${access.viewerUrl}`;
+}
+
+/** 输出 MMA 文本，每行包含邮箱和稳定取件码。 */
+function sendMmaExport(res, rows, publicMailService) {
+  const content = rows.map(row => {
+    const access = publicMailService.ensureAccess(row.id);
+    return `${row.email}----${access.token}`;
+  }).join("\r\n");
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Content-Disposition", "attachment; filename=hidden-addresses-mma.txt");
+  res.send(`\uFEFF${content}`);
+}
+
 /** 创建隐藏邮箱查询、导出和状态路由。 */
 export function createAddressRouter(repositories, publicMailService) {
   const router = Router();
@@ -37,17 +55,48 @@ export function createAddressRouter(repositories, publicMailService) {
     res.send(`\uFEFF${csv}`);
   });
 
-  /** 下载当前筛选结果的 MMA 文本，每行包含邮箱和标签。 */
+  /** 下载当前筛选结果的 MMA 文本，每行包含邮箱和公开取件码。 */
   router.get("/export-mma", (req, res) => {
     const rows = repositories.listAddresses({
       accountId: req.query.accountId,
       state: req.query.state,
       search: String(req.query.search || "").slice(0, 100)
     });
-    const content = rows.map(row => `${row.email}----${row.label}`).join("\r\n");
+    sendMmaExport(res, rows, publicMailService);
+  });
+
+  /** 按勾选邮箱或筛选条件导出 MMA 文本。 */
+  router.post("/export-mma", (req, res) => {
+    const filters = req.body?.filters || {};
+    const ids = Array.isArray(req.body?.ids) ? new Set(req.body.ids.map(String).slice(0, 1000)) : null;
+    const queryFilters = ids?.size ? {} : {
+      accountId: filters.accountId,
+      state: filters.state,
+      search: String(filters.search || "").slice(0, 100)
+    };
+    let rows = repositories.listAddresses(queryFilters);
+    if (ids?.size) rows = rows.filter(row => ids.has(row.id));
+    if (!rows.length) return res.status(400).json({ error: "没有可导出的邮箱" });
+    sendMmaExport(res, rows, publicMailService);
+  });
+
+  /** 批量生成或轮换公开访问链接，并导出给买家的取码文本。 */
+  router.post("/public-access/export", (req, res) => {
+    const kind = ["api", "both", "viewer"].includes(req.body?.kind) ? req.body.kind : "viewer";
+    const filters = req.body?.filters || {};
+    const ids = Array.isArray(req.body?.ids) ? new Set(req.body.ids.map(String).slice(0, 1000)) : null;
+    const queryFilters = ids?.size ? {} : {
+      accountId: filters.accountId,
+      state: filters.state,
+      search: String(filters.search || "").slice(0, 100)
+    };
+    let rows = repositories.listAddresses(queryFilters);
+    if (ids?.size) rows = rows.filter(row => ids.has(row.id));
+    if (!rows.length) return res.status(400).json({ error: "没有可导出的邮箱" });
+    const lines = rows.map(row => publicLinkLine(row.email, publicMailService.ensureAccess(row.id), kind));
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.setHeader("Content-Disposition", "attachment; filename=hidden-addresses-mma.txt");
-    res.send(`\uFEFF${content}`);
+    res.setHeader("Content-Disposition", `attachment; filename=public-mail-${kind}-links.txt`);
+    res.send(`\uFEFF${lines.join("\r\n")}`);
   });
 
   /** 批量修改邮箱状态。 */

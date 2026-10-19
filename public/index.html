@@ -16,6 +16,7 @@
       <a href="/tasks" data-route="tasks">生成任务</a>
       <a href="/addresses" data-route="addresses">邮箱库存</a>
       <a href="/inbox" data-route="inbox">收件与验证码</a>
+      <a href="/messages" data-route="messages">邮件搜索</a>
       <a href="/guide" data-route="guide">CK 获取指南</a>
     </nav>
     <div class="sidebar-user"><span id="adminName"></span><button id="logoutBtn" class="ghost">退出登录</button></div>
@@ -51,7 +52,7 @@
       </section>
 
       <section class="view hidden" data-view="addresses">
-        <div class="page-head"><div><p class="eyebrow">ADDRESS INVENTORY</p><h1>邮箱库存</h1><p class="muted">集中管理全部 CK 下的隐藏邮箱。</p></div><button id="exportBtn" class="ghost">导出 CSV</button></div>
+        <div class="page-head"><div><p class="eyebrow">ADDRESS INVENTORY</p><h1>邮箱库存</h1><p class="muted">集中管理全部 CK 下的隐藏邮箱。</p></div><div class="header-actions"><button id="exportBuyerViewerBtn" class="secondary">导出买家网页链接</button><button id="exportBuyerApiBtn" class="secondary">导出买家 JSON 链接</button><button id="exportBtn" class="ghost">导出 CSV</button></div></div>
         <section class="panel"><div class="table-tools"><select id="accountFilter"><option value="">全部 CK</option></select><select id="stateFilter"><option value="">全部状态</option><option value="unused">未使用</option><option value="used">已使用</option><option value="trash">垃圾箱</option></select><input id="addressSearch" placeholder="搜索邮箱或标签"></div><div class="bulk-bar"><label class="checkbox"><input id="selectAllAddresses" type="checkbox"> 选择本页</label><span id="selectedCount" class="muted">已选 0 个</span><select id="batchState"><option value="used">批量标记已使用</option><option value="unused">批量标记未使用</option><option value="trash">批量移入垃圾箱</option></select><button id="applyBatchStateBtn" class="secondary">应用状态</button></div><div class="table-wrap"><table><thead><tr><th></th><th>邮箱</th><th>Apple ID</th><th>标签</th><th>状态</th><th>来源</th><th>创建时间</th></tr></thead><tbody id="addressRows"></tbody></table></div><div id="addressPagination" class="pagination"></div></section>
       </section>
 
@@ -74,6 +75,6 @@
 
   <div id="toast" class="toast" role="status"></div>
   <dialog id="cookieDialog"><form id="updateCookieForm" method="dialog" class="stack"><h2>更新 CK</h2><label>区域<select name="region"><option value="auto">自动检测</option><option value="global">全球区</option><option value="china">中国区</option></select></label><label>新 CK<textarea name="cookie" rows="7" required></textarea></label><div class="dialog-actions"><button value="cancel" class="ghost">取消</button><button value="default" class="primary">校验并更新</button></div></form></dialog>
-  <script type="module" src="/assets/app.js?v=5"></script>
+  <script type="module" src="/assets/app.js?v=6"></script>
 </body>
 </html>

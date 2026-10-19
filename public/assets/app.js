@@ -24,6 +24,31 @@ function setBusy(formOrButton, busy, text = "处理中...") {
   button.disabled = busy; button.textContent = busy ? text : button.dataset.originalText || button.textContent;
 }
 
+/** 下载后端返回的文本文件。 */
+async function downloadText(path, options, fallbackName) {
+  const response = await fetch(path, {
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", ...(options?.headers || {}) },
+    ...options
+  });
+  const text = await response.text();
+  if (response.status === 401) {
+    location.href = "/login.html";
+    throw new Error("登录已过期");
+  }
+  if (!response.ok) {
+    let data = {};
+    try { data = JSON.parse(text || "{}"); } catch {}
+    throw new Error(data.error || `请求失败：${response.status}`);
+  }
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const filename = disposition.match(/filename="?([^"]+)"?/)?.[1] || fallbackName;
+  const url = URL.createObjectURL(new Blob([text], { type: response.headers.get("Content-Type") || "text/plain" }));
+  const link = document.createElement("a");
+  link.href = url; link.download = filename; document.body.append(link); link.click(); link.remove();
+  URL.revokeObjectURL(url);
+}
+
 /** 切换独立工作区并同步浏览器地址。 */
 function navigate(view, push = true) {
   const target = validViews.has(view) ? view : "overview";
@@ -176,6 +201,35 @@ async function applyBatchState() {
   catch (error) { toast(error.message, true); } finally { setBusy(elements.applyBatchStateBtn, false); }
 }
 
+/** 生成或重置公开链接，并导出买家可用的取码 URL。 */
+async function exportBuyerLinks(kind) {
+  const ids = [...state.selectedAddressIds];
+  const scopeText = ids.length ? `选中的 ${ids.length} 个邮箱` : "当前筛选结果";
+  if (!confirm(`将为${scopeText}生成或重置公开链接，旧链接会失效，是否继续？`)) return;
+  const button = kind === "api" ? elements.exportBuyerApiBtn : elements.exportBuyerViewerBtn;
+  setBusy(button, true, "导出中...");
+  try {
+    await downloadText("/api/addresses/public-access/export", {
+      method: "POST",
+      body: JSON.stringify({
+        filters: {
+          accountId: elements.accountFilter.value,
+          state: elements.stateFilter.value,
+          search: elements.addressSearch.value.trim()
+        },
+        ids,
+        kind
+      })
+    }, kind === "api" ? "public-mail-api-links.txt" : "public-mail-viewer-links.txt");
+    await loadAddresses();
+    toast(kind === "api" ? "JSON 取码链接已导出" : "网页取码链接已导出");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
 /** 保存当前 CK 独立的 IMAP 配置。 */
 async function saveInboxConfig(event) {
   event.preventDefault(); const accountId = elements.inboxAccount.value; if (!accountId) return toast("请选择 CK 账号", true);
@@ -237,6 +291,8 @@ async function main() {
   elements.addressRows.addEventListener("change", handleAddressChange); elements.selectAllAddresses.onchange = () => { for (const item of state.addresses) elements.selectAllAddresses.checked ? state.selectedAddressIds.add(item.id) : state.selectedAddressIds.delete(item.id); elements.addressRows.querySelectorAll("[data-address-select]").forEach(box => { box.checked = elements.selectAllAddresses.checked; }); updateSelectedCount(); }; elements.applyBatchStateBtn.onclick = applyBatchState;
   let searchTimer; elements.accountFilter.onchange = () => { state.addressPagination.page = 1; loadAddresses(); }; elements.stateFilter.onchange = () => { state.addressPagination.page = 1; loadAddresses(); }; elements.addressSearch.oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.addressPagination.page = 1; loadAddresses(); }, 300); };
   elements.exportBtn.onclick = () => { location.href = `/api/addresses/export?accountId=${encodeURIComponent(elements.accountFilter.value)}&state=${encodeURIComponent(elements.stateFilter.value)}`; };
+  elements.exportBuyerViewerBtn.onclick = () => exportBuyerLinks("viewer");
+  elements.exportBuyerApiBtn.onclick = () => exportBuyerLinks("api");
   elements.inboxForm.addEventListener("submit", saveInboxConfig); elements.syncInboxBtn.onclick = syncInbox; elements.inboxAccount.onchange = () => { state.messagePagination.page = 1; loadInbox(); };
   elements.menuBtn.onclick = () => document.body.classList.toggle("menu-open"); elements.logoutBtn.onclick = async () => { await api("/api/auth/logout", { method: "POST", body: "{}" }); location.href = "/login.html"; }; window.onpopstate = () => navigate(location.pathname.slice(1), false);
   await loadCoreData(); await loadInbox(); navigate(location.pathname.slice(1), false);

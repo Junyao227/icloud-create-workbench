@@ -216,3 +216,10 @@ catalogs:
   peer:
     react: 19.2.1
     react-dom: 19.2.1
+
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+  msw: true
+  simple-git-hooks: true
+  unrs-resolver: true

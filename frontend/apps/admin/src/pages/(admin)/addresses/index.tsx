@@ -18,7 +18,7 @@ import ActionDialog from '@/components/ActionDialog';
 import MailDrawer from '@/components/MailDrawer';
 import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
-import { apiFetch, queryString } from '@/service/workbench';
+import { apiFetch, downloadTextFile, queryString } from '@/service/workbench';
 import type { Account, Address, Pagination as PageInfo } from '@/types/workbench';
 
 interface PublicLinks {
@@ -96,9 +96,25 @@ const AddressesPage = () => {
     window.location.assign(`/api/addresses/export?${queryString({ ...draftFilters })}`);
   }
 
-  /** 按 MMA 文本格式导出当前输入的筛选结果。 */
-  function exportFilteredMmaAddresses() {
-    window.location.assign(`/api/addresses/export-mma?${queryString({ ...draftFilters })}`);
+  /** 有勾选时导出勾选邮箱；未勾选时按当前输入的筛选条件导出 MMA。 */
+  async function exportMmaAddresses() {
+    try {
+      if (selected.size) {
+        await downloadTextFile(
+          '/api/addresses/export-mma',
+          {
+            body: JSON.stringify({ ids: [...selected] }),
+            method: 'POST'
+          },
+          'hidden-addresses-mma.txt'
+        );
+        toast({ body: `已导出选中的 ${selected.size} 个邮箱` });
+        return;
+      }
+      window.location.assign(`/api/addresses/export-mma?${queryString({ ...draftFilters })}`);
+    } catch (error) {
+      toast({ body: error instanceof Error ? error.message : 'MMA 导出失败', type: 'error' });
+    }
   }
 
   /** 批量修改选中邮箱状态。 */
@@ -224,7 +240,7 @@ const AddressesPage = () => {
             />
             <Button label="查询" variant="primary" onClick={applyFilters} />
             <Button label="筛选导出" onClick={exportFilteredAddresses} />
-            <Button label="筛选导出 MMA" onClick={exportFilteredMmaAddresses} />
+            <Button label={selected.size ? '导出选中 MMA' : '筛选导出 MMA'} onClick={exportMmaAddresses} />
           </HStack>
           <HStack gap={2} wrap="wrap">
             <Button label="批量已使用" onClick={() => batchState('used')} />

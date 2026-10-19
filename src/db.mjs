@@ -106,6 +106,18 @@ export function createDatabase(databasePath) {
       updated_at TEXT,
       FOREIGN KEY(account_id) REFERENCES icloud_accounts(id)
     );
+    CREATE TABLE IF NOT EXISTS account_inbox_mailbox_states (
+      account_id TEXT NOT NULL,
+      mailbox TEXT NOT NULL,
+      last_uid INTEGER NOT NULL DEFAULT 0,
+      uid_validity TEXT,
+      last_sync_at TEXT,
+      last_error TEXT,
+      html_backfill_done INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT,
+      PRIMARY KEY(account_id, mailbox),
+      FOREIGN KEY(account_id) REFERENCES icloud_accounts(id)
+    );
     CREATE TABLE IF NOT EXISTS inbox_messages (
       id TEXT PRIMARY KEY,
       address_id TEXT,
@@ -123,6 +135,7 @@ export function createDatabase(databasePath) {
     CREATE TABLE IF NOT EXISTS address_public_access (
       address_id TEXT PRIMARY KEY,
       token_hash TEXT NOT NULL,
+      token_encrypted TEXT,
       created_at TEXT NOT NULL,
       rotated_at TEXT,
       last_access_at TEXT,
@@ -172,6 +185,10 @@ export function createDatabase(databasePath) {
   if (!messageColumns.some(column => column.name === "body_html")) {
     db.exec("ALTER TABLE inbox_messages ADD COLUMN body_html TEXT");
   }
+  const accessColumns = db.pragma("table_info(address_public_access)");
+  if (!accessColumns.some(column => column.name === "token_encrypted")) {
+    db.exec("ALTER TABLE address_public_access ADD COLUMN token_encrypted TEXT");
+  }
   const configColumns = db.pragma("table_info(account_inbox_configs)");
   const inboxMigrations = [
     ["last_uid", "ALTER TABLE account_inbox_configs ADD COLUMN last_uid INTEGER NOT NULL DEFAULT 0"],
@@ -186,5 +203,6 @@ export function createDatabase(databasePath) {
   }
   db.exec("CREATE INDEX IF NOT EXISTS idx_messages_account ON inbox_messages(account_id, received_at DESC)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_inbox_configs_due ON account_inbox_configs(next_sync_at)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_inbox_mailbox_states_account ON account_inbox_mailbox_states(account_id)");
   return db;
 }

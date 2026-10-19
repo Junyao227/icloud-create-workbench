@@ -409,11 +409,12 @@ export function createRepositories(db) {
   }
 
   /** 创建或轮换邮箱公开访问密钥哈希。 */
-  function savePublicAccess(addressId, tokenHash) {
+  function savePublicAccess(addressId, tokenHash, tokenEncrypted = "") {
     const now = new Date().toISOString();
-    db.prepare(`INSERT INTO address_public_access (address_id, token_hash, created_at)
-      VALUES (?, ?, ?) ON CONFLICT(address_id) DO UPDATE SET token_hash = excluded.token_hash,
-      rotated_at = excluded.created_at, last_access_at = NULL`).run(addressId, tokenHash, now);
+    db.prepare(`INSERT INTO address_public_access (address_id, token_hash, token_encrypted, created_at)
+      VALUES (?, ?, ?, ?) ON CONFLICT(address_id) DO UPDATE SET token_hash = excluded.token_hash,
+      token_encrypted = excluded.token_encrypted, rotated_at = excluded.created_at, last_access_at = NULL`)
+      .run(addressId, tokenHash, tokenEncrypted, now);
   }
 
   /** 撤销邮箱公开访问。 */
@@ -421,9 +422,16 @@ export function createRepositories(db) {
     return db.prepare("DELETE FROM address_public_access WHERE address_id = ?").run(addressId).changes > 0;
   }
 
+  /** 读取邮箱已保存的公开访问密钥密文。 */
+  function getPublicAccess(addressId) {
+    return db.prepare(`SELECT address_id AS addressId, token_hash AS tokenHash, token_encrypted AS tokenEncrypted,
+      created_at AS createdAt, rotated_at AS rotatedAt, last_access_at AS lastAccessAt
+      FROM address_public_access WHERE address_id = ?`).get(addressId) || null;
+  }
+
   /** 使用邮箱和密钥哈希读取最新邮件。 */
   function getLatestPublicMail(email, tokenHash) {
-    const access = db.prepare(`SELECT h.id AS addressId, h.email FROM hidden_addresses h
+    const access = db.prepare(`SELECT h.id AS addressId, h.account_id AS accountId, h.email FROM hidden_addresses h
       JOIN address_public_access p ON p.address_id = h.id
       WHERE lower(h.email) = lower(?) AND p.token_hash = ?`).get(email, tokenHash);
     if (!access) return null;
@@ -432,7 +440,22 @@ export function createRepositories(db) {
       .get(access.addressId) || null;
     db.prepare("UPDATE address_public_access SET last_access_at = ? WHERE address_id = ?")
       .run(new Date().toISOString(), access.addressId);
-    return { email: access.email, message };
+    return { accountId: access.accountId, email: access.email, message };
+  }
+
+  /** 使用邮箱和密钥哈希读取公开邮件列表。 */
+  function getPublicMailMessages(email, tokenHash, limit = 15) {
+    const access = db.prepare(`SELECT h.id AS addressId, h.account_id AS accountId, h.email FROM hidden_addresses h
+      JOIN address_public_access p ON p.address_id = h.id
+      WHERE lower(h.email) = lower(?) AND p.token_hash = ?`).get(email, tokenHash);
+    if (!access) return null;
+    const safeLimit = Math.min(50, Math.max(1, Number(limit) || 15));
+    const messages = db.prepare(`SELECT id, subject, sender, code, preview, body_text AS bodyText, body_html AS bodyHtml,
+      received_at AS receivedAt FROM inbox_messages WHERE address_id = ? ORDER BY received_at DESC LIMIT ?`)
+      .all(access.addressId, safeLimit);
+    db.prepare("UPDATE address_public_access SET last_access_at = ? WHERE address_id = ?")
+      .run(new Date().toISOString(), access.addressId);
+    return { accountId: access.accountId, email: access.email, messages };
   }
 
   /** 读取全局 IMAP 配置内部数据。 */
@@ -454,11 +477,59 @@ export function createRepositories(db) {
         input.lastError || "", new Date().toISOString(), accountId);
   }
 
+  /** 读取单个 IMAP 文件夹的增量游标；不存在时从全局游标迁移一次，兼容旧数据。 */
+  function getInboxMailboxState(accountId, mailbox) {
+    const normalizedMailbox = String(mailbox || "INBOX");
+    const row = db.prepare(`SELECT account_id AS accountId, mailbox, last_uid AS lastUid,
+      uid_validity AS uidValidity, last_sync_at AS lastSyncAt, last_error AS lastError,
+      html_backfill_done AS htmlBackfillDone, updated_at AS updatedAt
+      FROM account_inbox_mailbox_states WHERE account_id = ? AND mailbox = ?`).get(accountId, normalizedMailbox);
+    if (row) return row;
+    const config = getInboxConfigInternal(accountId);
+    if (config && normalizedMailbox === String(config.mailbox || "INBOX")) {
+      return {
+        accountId,
+        mailbox: normalizedMailbox,
+        lastUid: Number(config.last_uid || 0),
+        uidValidity: config.uid_validity || "",
+        lastSyncAt: config.last_sync_at || "",
+        lastError: config.last_error || "",
+        htmlBackfillDone: Number(config.html_backfill_done || 0),
+        updatedAt: config.updated_at || ""
+      };
+    }
+    return {
+      accountId,
+      mailbox: normalizedMailbox,
+      lastUid: 0,
+      uidValidity: "",
+      lastSyncAt: "",
+      lastError: "",
+      htmlBackfillDone: 1,
+      updatedAt: ""
+    };
+  }
+
+  /** 保存单个 IMAP 文件夹的增量游标。 */
+  function saveInboxMailboxState(accountId, mailbox, input) {
+    const now = new Date().toISOString();
+    db.prepare(`INSERT INTO account_inbox_mailbox_states
+      (account_id, mailbox, last_uid, uid_validity, last_sync_at, last_error, html_backfill_done, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(account_id, mailbox) DO UPDATE SET last_uid = excluded.last_uid,
+        uid_validity = excluded.uid_validity, last_sync_at = excluded.last_sync_at,
+        last_error = excluded.last_error, html_backfill_done = excluded.html_backfill_done,
+        updated_at = excluded.updated_at`)
+      .run(accountId, String(mailbox || "INBOX"), input.lastUid || 0, input.uidValidity || "",
+        input.lastSyncAt || null, input.lastError || "", input.htmlBackfillDone ? 1 : 0, now);
+  }
+
   /** 重置 IMAP 增量游标并安排立即同步。 */
   function resetInboxSyncState(accountId) {
     db.prepare(`UPDATE account_inbox_configs SET last_uid = 0, uid_validity = NULL,
       next_sync_at = ?, last_error = '', updated_at = ? WHERE account_id = ?`)
       .run(new Date().toISOString(), new Date().toISOString(), accountId);
+    db.prepare("DELETE FROM account_inbox_mailbox_states WHERE account_id = ?").run(accountId);
   }
 
   /** 标记现有邮件 HTML 一次性回填已经完成。 */
@@ -523,8 +594,8 @@ export function createRepositories(db) {
     countAddresses, createCampaign, findOpenCampaign, getCampaignInternal, listCampaigns, listDueCampaigns,
     stopCampaign, resumeCampaign, updateCampaignLabelPrefix, deleteCampaign, completeCampaign, recordCampaignRun,
     upsertAddresses, listAddresses, pageAddresses, updateAddressState, updateAddressStates,
-    getAddress, pageAddressMessages, getMessage, savePublicAccess, revokePublicAccess, getLatestPublicMail,
-    getInboxConfigInternal, listInboxConfigs, updateInboxSyncState, resetInboxSyncState, completeInboxHtmlBackfill,
+    getAddress, pageAddressMessages, getMessage, savePublicAccess, revokePublicAccess, getPublicAccess, getLatestPublicMail, getPublicMailMessages,
+    getInboxConfigInternal, listInboxConfigs, updateInboxSyncState, getInboxMailboxState, saveInboxMailboxState, resetInboxSyncState, completeInboxHtmlBackfill,
     saveInboxConfig, insertMessage, listMessages, pageMessages
   };
 }

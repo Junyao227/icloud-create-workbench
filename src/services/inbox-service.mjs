@@ -2,6 +2,8 @@ import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { decryptSecret, encryptSecret } from "../security.mjs";
 
+const FALLBACK_JUNK_MAILBOX_NAMES = ["Junk", "Junk E-mail", "Junk Email", "Spam", "垃圾邮件"];
+
 /** 从邮件文本中提取常见验证码。 */
 export function extractCode(text) {
   const content = String(text || "");
@@ -48,11 +50,38 @@ export function inlineAttachmentCidImages(html, attachments) {
 
 /** 创建全局 IMAP 收件服务。 */
 export function createInboxService({ config, repositories }) {
-  const activeSyncs = new Set();
+  const activeSyncs = new Map();
 
   /** 计算下一次后台同步时间。 */
   function nextSyncAt() {
     return new Date(Date.now() + config.inboxSyncIntervalSeconds * 1000).toISOString();
+  }
+
+  /** 去重并保序；iCloud 垃圾箱常见名会由 list() 的 \Junk 标记自动识别。 */
+  function uniqueMailboxes(mailboxes) {
+    const seen = new Set();
+    const rows = [];
+    for (const mailbox of mailboxes) {
+      const value = String(mailbox || "").trim();
+      const key = value.toLowerCase();
+      if (!value || seen.has(key)) continue;
+      seen.add(key);
+      rows.push(value);
+    }
+    return rows;
+  }
+
+  /** 找出需要同步的文件夹：配置文件夹 + IMAP 标记的 Junk；无法列目录时用常见垃圾箱名称兜底。 */
+  async function resolveSyncMailboxes(client, primaryMailbox) {
+    const primary = String(primaryMailbox || "INBOX").trim() || "INBOX";
+    try {
+      const listed = await client.list();
+      const junk = listed.find(item => item.specialUse === "\\Junk")?.path
+        || listed.find(item => FALLBACK_JUNK_MAILBOX_NAMES.some(name => String(item.name || item.path || "").toLowerCase() === name.toLowerCase()))?.path;
+      return uniqueMailboxes([primary, junk]);
+    } catch {
+      return uniqueMailboxes([primary, ...FALLBACK_JUNK_MAILBOX_NAMES]);
+    }
   }
 
   /** 返回不包含密码的 IMAP 配置。 */
@@ -129,11 +158,9 @@ export function createInboxService({ config, repositories }) {
   }
 
   /** 连接 IMAP 并按 UID 增量同步邮件。 */
-  async function sync(accountId) {
-    if (activeSyncs.has(accountId)) throw Object.assign(new Error("该 CK 的邮箱正在同步"), { status: 409 });
+  async function runSync(accountId) {
     const stored = repositories.getInboxConfigInternal(accountId);
     if (!stored?.password_encrypted) throw Object.assign(new Error("尚未配置 IMAP 收件邮箱"), { status: 400 });
-    activeSyncs.add(accountId);
     const client = new ImapFlow({
       host: stored.host,
       port: stored.port,
@@ -143,52 +170,119 @@ export function createInboxService({ config, repositories }) {
     });
     let added = 0;
     let scanned = 0;
-    let lastUid = Number(stored.last_uid || 0);
-    let uidValidity = String(stored.uid_validity || "");
-    const needsHtmlBackfill = !Boolean(stored.html_backfill_done);
+    let latestPrimaryState = {
+      lastUid: Number(stored.last_uid || 0),
+      uidValidity: String(stored.uid_validity || ""),
+      lastSyncAt: stored.last_sync_at || "",
+      lastError: ""
+    };
     try {
       await client.connect();
-      const lock = await client.getMailboxLock(stored.mailbox || "INBOX");
-      try {
-        const total = Number(client.mailbox?.exists || 0);
-        const currentValidity = String(client.mailbox?.uidValidity || "");
-        if (uidValidity && currentValidity && uidValidity !== currentValidity) lastUid = 0;
-        uidValidity = currentValidity;
-        if (!total) {
-          if (needsHtmlBackfill) repositories.completeInboxHtmlBackfill(accountId);
-          repositories.updateInboxSyncState(accountId, { lastUid, uidValidity, lastSyncAt: new Date().toISOString(), nextSyncAt: nextSyncAt(), lastError: "" });
-          return { added: 0, scanned: 0 };
+      const primaryMailbox = stored.mailbox || "INBOX";
+      const mailboxes = await resolveSyncMailboxes(client, primaryMailbox);
+      const errors = [];
+      const criticalErrors = [];
+      for (const mailbox of mailboxes) {
+        const isPrimaryMailbox = mailbox.toLowerCase() === String(primaryMailbox).toLowerCase();
+        let state = repositories.getInboxMailboxState(accountId, mailbox);
+        let lastUid = Number(state.lastUid || 0);
+        let uidValidity = String(state.uidValidity || "");
+        const needsHtmlBackfill = !Boolean(state.htmlBackfillDone);
+        let lock;
+        try {
+          lock = await client.getMailboxLock(mailbox);
+          const total = Number(client.mailbox?.exists || 0);
+          const currentValidity = String(client.mailbox?.uidValidity || "");
+          if (uidValidity && currentValidity && uidValidity !== currentValidity) lastUid = 0;
+          uidValidity = currentValidity;
+          const lastSyncAt = new Date().toISOString();
+          const saveState = errorMessage => {
+            state = {
+              ...state,
+              lastUid,
+              uidValidity,
+              lastSyncAt,
+              lastError: errorMessage || "",
+              htmlBackfillDone: needsHtmlBackfill ? 1 : state.htmlBackfillDone
+            };
+            repositories.saveInboxMailboxState(accountId, mailbox, state);
+            if (isPrimaryMailbox) latestPrimaryState = state;
+          };
+
+          if (!total) {
+            saveState("");
+            continue;
+          }
+          const uidNext = Number(client.mailbox?.uidNext || 0);
+          if (!needsHtmlBackfill && lastUid > 0 && uidNext > 0 && lastUid >= uidNext - 1) {
+            saveState("");
+            continue;
+          }
+          const query = { uid: true, source: true, envelope: true, internalDate: true };
+          const range = needsHtmlBackfill
+            ? `${Math.max(1, total - 499)}:*`
+            : lastUid > 0 ? `${lastUid + 1}:*` : `${Math.max(1, total - 99)}:*`;
+          const options = !needsHtmlBackfill && lastUid > 0 ? { uid: true } : undefined;
+          for await (const message of client.fetch(range, query, options)) {
+            scanned++;
+            lastUid = Math.max(lastUid, Number(message.uid || 0));
+            const inserted = await saveMessage(accountId, mailbox, message, needsHtmlBackfill);
+            if (inserted) added++;
+          }
+          saveState("");
+        } catch (error) {
+          errors.push(`${mailbox}: ${error.message}`);
+          if (isPrimaryMailbox) criticalErrors.push(`${mailbox}: ${error.message}`);
+          repositories.saveInboxMailboxState(accountId, mailbox, {
+            ...state,
+            lastUid,
+            uidValidity,
+            lastSyncAt: state.lastSyncAt || new Date().toISOString(),
+            lastError: error.message,
+            htmlBackfillDone: state.htmlBackfillDone
+          });
+        } finally {
+          lock?.release();
         }
-        const uidNext = Number(client.mailbox?.uidNext || 0);
-        if (!needsHtmlBackfill && lastUid > 0 && uidNext > 0 && lastUid >= uidNext - 1) {
-          repositories.updateInboxSyncState(accountId, { lastUid, uidValidity, lastSyncAt: new Date().toISOString(), nextSyncAt: nextSyncAt(), lastError: "" });
-          return { added: 0, scanned: 0 };
-        }
-        const query = { uid: true, source: true, envelope: true, internalDate: true };
-        const range = needsHtmlBackfill
-          ? `${Math.max(1, total - 499)}:*`
-          : lastUid > 0 ? `${lastUid + 1}:*` : `${Math.max(1, total - 99)}:*`;
-        const options = !needsHtmlBackfill && lastUid > 0 ? { uid: true } : undefined;
-        for await (const message of client.fetch(range, query, options)) {
-          scanned++;
-          lastUid = Math.max(lastUid, Number(message.uid || 0));
-          const inserted = await saveMessage(accountId, stored.mailbox || "INBOX", message, needsHtmlBackfill);
-          if (inserted) added++;
-        }
-        if (needsHtmlBackfill) repositories.completeInboxHtmlBackfill(accountId);
-        repositories.updateInboxSyncState(accountId, { lastUid, uidValidity, lastSyncAt: new Date().toISOString(), nextSyncAt: nextSyncAt(), lastError: "" });
-        return { added, scanned };
-      } finally {
-        lock.release();
       }
+      if (!errors.length) repositories.completeInboxHtmlBackfill(accountId);
+      repositories.updateInboxSyncState(accountId, {
+        lastUid: latestPrimaryState.lastUid || 0,
+        uidValidity: latestPrimaryState.uidValidity || "",
+        lastSyncAt: new Date().toISOString(),
+        nextSyncAt: nextSyncAt(),
+        lastError: criticalErrors.join("；")
+      });
+      if (criticalErrors.length) throw new Error(criticalErrors.join("；"));
+      return { added, scanned, mailboxes };
     } catch (error) {
-      repositories.updateInboxSyncState(accountId, { lastUid, uidValidity, lastSyncAt: stored.last_sync_at, nextSyncAt: nextSyncAt(), lastError: error.message });
+      repositories.updateInboxSyncState(accountId, {
+        lastUid: latestPrimaryState.lastUid || 0,
+        uidValidity: latestPrimaryState.uidValidity || "",
+        lastSyncAt: stored.last_sync_at,
+        nextSyncAt: nextSyncAt(),
+        lastError: error.message
+      });
       throw error;
     } finally {
       await client.logout().catch(() => {});
-      activeSyncs.delete(accountId);
     }
   }
 
-  return { getConfig, saveConfig, sync };
+  async function sync(accountId) {
+    if (activeSyncs.has(accountId)) throw Object.assign(new Error("该 CK 的邮箱正在同步"), { status: 409 });
+    const promise = runSync(accountId).finally(() => activeSyncs.delete(accountId));
+    activeSyncs.set(accountId, promise);
+    return promise;
+  }
+
+  async function syncOrJoin(accountId) {
+    const existing = activeSyncs.get(accountId);
+    if (existing) return existing;
+    const promise = runSync(accountId).finally(() => activeSyncs.delete(accountId));
+    activeSyncs.set(accountId, promise);
+    return promise;
+  }
+
+  return { getConfig, saveConfig, sync, syncOrJoin };
 }

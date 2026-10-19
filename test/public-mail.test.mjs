@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import request from "supertest";
+import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,6 +24,7 @@ function createContext() {
   const config = {
     appOrigin: "http://127.0.0.1:4173", adminUsername: "admin", adminPasswordHash: hashPassword("password-12345"),
     jwtSecret: "public-mail-test-secret-value-123456789", jwtExpiresIn: "8h", cookieSecure: false,
+    encryptionKey: randomBytes(32).toString("base64"),
     publicMailRateLimit: 60
   };
   const publicMailService = createPublicMailService({ config, repositories });
@@ -38,12 +40,17 @@ test("公开链接在无邮件时返回 message null，并带跨域与禁用缓�
   const context = createContext();
   try {
     const access = context.publicMailService.createAccess(context.address.id);
-    const path = new URL(access.apiUrl).pathname;
+    const path = new URL(access.legacyApiUrl).pathname;
     const response = await request(context.app).get(path).expect(200);
     assert.equal(response.body.email, "public@icloud.com");
     assert.equal(response.body.message, null);
     assert.equal(response.headers["access-control-allow-origin"], "*");
     assert.match(response.headers["cache-control"], /no-store/);
+    const feed = new URL(access.apiUrl);
+    const feedResponse = await request(context.app).get(`${feed.pathname}${feed.search}`).expect(200);
+    assert.equal(feedResponse.body.status, "success");
+    assert.equal(feedResponse.body.count, 0);
+    assert.deepEqual(feedResponse.body.data, []);
   } finally { context.cleanup(); }
 });
 
@@ -65,13 +72,19 @@ test("公开接口返回最新邮件的纯文本和 HTML，错误或撤销密钥
     assert.equal(backfilled, false);
     assert.equal(ignoredHistory, false);
     assert.equal(context.repositories.pageAddressMessages(context.address.id, 1, 20).total, 1);
-    const path = new URL(access.apiUrl).pathname;
+    const path = new URL(access.legacyApiUrl).pathname;
     const response = await request(context.app).get(path).expect(200);
     assert.equal(response.body.message.code, "654321");
     assert.equal(response.body.message.bodyText, "您的验证码是 654321");
     assert.equal(response.body.message.bodyHtml, "<strong>您的验证码是 654321</strong>");
     const stored = context.repositories.getMessage(response.body.message.id);
     assert.equal(stored.bodyHtml, "<strong>您的验证码是 654321</strong>");
+    const feed = new URL(access.apiUrl);
+    const feedResponse = await request(context.app).get(`${feed.pathname}${feed.search}`).expect(200);
+    assert.equal(feedResponse.body.status, "success");
+    assert.equal(feedResponse.body.count, 1);
+    assert.equal(feedResponse.body.data[0].code, "654321");
+    assert.equal(feedResponse.body.data[0].body, "<strong>您的验证码是 654321</strong>");
     await request(context.app).get(path.replace(access.token, "wrong-token-value-that-is-long-enough-123456")).expect(404);
     context.publicMailService.revokeAccess(context.address.id);
     await request(context.app).get(path).expect(404);

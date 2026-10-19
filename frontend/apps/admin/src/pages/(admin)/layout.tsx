@@ -2,7 +2,7 @@ import { AppShell } from '@astryxdesign/core/AppShell';
 import { SideNav, SideNavItem, SideNavSection } from '@astryxdesign/core/SideNav';
 import { TopNav, TopNavHeading } from '@astryxdesign/core/TopNav';
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router';
-import { BookOpen, Clock3, Inbox, KeyRound, LayoutDashboard, Mail } from 'lucide-react';
+import { BookOpen, Clock3, Inbox, KeyRound, LayoutDashboard, Mail, Search } from 'lucide-react';
 
 import SystemLogo from '@/components/SystemLogo';
 import UserAvatar from '@/features/auth/components/UserAvatar';
@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: '/tasks', icon: Clock3, label: '生产任务' },
   { href: '/addresses', icon: Mail, label: '邮箱库存' },
   { href: '/inbox', icon: Inbox, label: '收件与验证码' },
+  { href: '/messages', icon: Search, label: '邮件搜索' },
   { href: '/guide', icon: BookOpen, label: 'CK 获取指南' }
 ] as const;
 

@@ -1,4 +1,5 @@
 import express from "express";
+import { createMessageSearchRouter } from "./routes/message-search-routes.mjs";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { existsSync } from "node:fs";
@@ -15,7 +16,7 @@ import { requireAdmin, requireTrustedOrigin } from "./middleware.mjs";
 import { verifyAdminToken } from "./security.mjs";
 
 /** 创建配置完整的 Express 应用。 */
-export function createApp({ config, repositories, icloudService, inboxService, campaignService, publicMailService }) {
+export function createApp({ config, repositories, icloudService, inboxService, campaignService, publicMailService, messageSearch }) {
   const app = express();
   const skyrocDir = join(process.cwd(), "frontend", "apps", "admin", "dist");
   const legacyDir = join(process.cwd(), "public");
@@ -32,12 +33,14 @@ export function createApp({ config, repositories, icloudService, inboxService, c
 
   /** 返回不含敏感信息的健康状态。 */
   app.get("/api/health", (req, res) => res.json({ ok: true, service: "icloud-create-workbench" }));
-  app.use("/openapi", createPublicMailRouter(config, publicMailService));
+  app.use("/openapi", createPublicMailRouter(config, publicMailService, inboxService));
+  app.use("/console", createPublicMailRouter(config, publicMailService, inboxService));
   app.use("/api/auth", createAuthRouter(config));
 
   const requireApiAdmin = requireAdmin(config);
   app.use("/api/icloud-accounts", requireApiAdmin, createAccountRouter({ repositories, icloudService }));
   app.use("/api/addresses", requireApiAdmin, createAddressRouter(repositories, publicMailService));
+  app.use("/api/messages", requireApiAdmin, createMessageSearchRouter(messageSearch));
   app.use("/api/messages", requireApiAdmin, createMessageRouter(repositories));
   app.use("/api/inbox", requireApiAdmin, createInboxRouter({ inboxService, repositories }));
   app.use("/api/generation-jobs", requireApiAdmin, createTaskRouter(repositories));
@@ -56,15 +59,38 @@ export function createApp({ config, repositories, icloudService, inboxService, c
     res.setHeader("Pragma", "no-cache");
     res.sendFile(join(frontendDir, "index.html"));
   };
-  app.get(["/login", "/login/", "/login.html", "/login-out"], sendFrontend);
+  /** 旧版 public 前端没有 React 登录路由，必须直接返回登录页。 */
+  const sendLogin = (req, res) => {
+    if (frontendDir === legacyDir) {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0, no-transform");
+      res.setHeader("Pragma", "no-cache");
+      return res.sendFile(join(legacyDir, "login.html"));
+    }
+    return sendFrontend(req, res);
+  };
+  app.get(["/login", "/login/", "/login.html", "/login-out"], sendLogin);
   app.get("/mail/:email/:token", (req, res) => {
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    sendFrontend(req, res);
+  });
+  app.get("/console/open.php", (req, res) => {
+    const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+    res.redirect(302, `/console/open-php${query}`);
+  });
+  app.get("/console/api-links.php", (req, res) => res.redirect(302, "/api-links"));
+  app.get("/console/open/php", (req, res) => {
+    const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+    res.redirect(302, `/console/open-php${query}`);
+  });
+  app.get(["/pickup", "/api-links", "/console/open-php"], (req, res) => {
     res.setHeader("Cache-Control", "no-store, max-age=0");
     res.setHeader("Referrer-Policy", "no-referrer");
     sendFrontend(req, res);
   });
 
   /** 在服务器侧校验管理页面会话并返回 React 入口。 */
-  app.get(["/", "/index.html", "/home", "/overview", "/accounts", "/tasks", "/addresses", "/addresses/:id", "/inbox", "/guide"], (req, res) => {
+  app.get(["/", "/index.html", "/home", "/overview", "/accounts", "/tasks", "/addresses", "/addresses/:id", "/inbox", "/messages", "/guide"], (req, res) => {
     try {
       verifyAdminToken(req.cookies?.workbench_admin, config);
       sendFrontend(req, res);
